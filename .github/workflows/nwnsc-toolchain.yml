@@ -13,7 +13,7 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch nwnsc 1.1.5
+      - name: Fetch nwnsc 1.1.5 and public 1.69 nwscript header
         run: |
           mkdir -p out
           curl -L --fail https://github.com/nwneetools/nwnsc/releases/download/v1.1.5/nwnsc-linux-v1.1.5.zip -o /tmp/nwnsc.zip
@@ -22,11 +22,12 @@ jobs:
           test -n "$NWNSC"
           cp "$NWNSC" out/nwnsc
           chmod +x out/nwnsc
-          out/nwnsc -h >/dev/null 2>&1 || true
-          sha256sum out/nwnsc > out/SHA256SUMS.txt
+          curl -L --fail https://raw.githubusercontent.com/lachjames/ncs2nss/master/nwscript.nss -o out/nwscript.nss
+          test -s out/nwscript.nss
+          sha256sum out/nwnsc out/nwscript.nss > out/SHA256SUMS.txt
       - name: Upload compiler
         uses: actions/upload-artifact@v4
         with:
-          name: nwnsc-linux-1.1.5
+          name: nwnsc-linux-1.1.5-with-nwscript
           path: out/
           retention-days: 1
