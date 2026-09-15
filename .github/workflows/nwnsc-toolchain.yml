@@ -13,7 +13,7 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch nwnsc 1.1.5 and public 1.69 nwscript header
+      - name: Fetch nwnsc 1.1.5
         run: |
           mkdir -p out
           curl -L --fail https://github.com/nwneetools/nwnsc/releases/download/v1.1.5/nwnsc-linux-v1.1.5.zip -o /tmp/nwnsc.zip
@@ -22,12 +22,27 @@ jobs:
           test -n "$NWNSC"
           cp "$NWNSC" out/nwnsc
           chmod +x out/nwnsc
-          curl -L --fail https://raw.githubusercontent.com/lachjames/ncs2nss/master/nwscript.nss -o out/nwscript.nss
+      - name: Extract NWN EE nwscript definitions from Beamdog server image
+        run: |
+          docker pull beamdog/nwserver:latest
+          CID=$(docker create beamdog/nwserver:latest)
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          docker export "$CID" -o /tmp/nwserver.tar
+          tar -tf /tmp/nwserver.tar | grep -i 'nwscript\.nss$' | head -20 | tee /tmp/nwscript_paths.txt || true
+          PATH_IN_IMAGE=$(head -1 /tmp/nwscript_paths.txt || true)
+          if [ -z "$PATH_IN_IMAGE" ]; then
+            echo 'No standalone nwscript.nss found in image' >&2
+            exit 2
+          fi
+          tar -xOf /tmp/nwserver.tar "$PATH_IN_IMAGE" > out/nwscript.nss
           test -s out/nwscript.nss
+          grep -q 'GetPCChatSpeaker' out/nwscript.nss
+          grep -q 'SetPCChatMessage' out/nwscript.nss
+          head -20 out/nwscript.nss
           sha256sum out/nwnsc out/nwscript.nss > out/SHA256SUMS.txt
       - name: Upload compiler
         uses: actions/upload-artifact@v4
         with:
-          name: nwnsc-linux-1.1.5-with-nwscript
+          name: nwnsc-linux-1.1.5-with-official-nwscript
           path: out/
           retention-days: 1
