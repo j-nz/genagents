@@ -22,25 +22,20 @@ jobs:
           test -n "$NWNSC"
           cp "$NWNSC" out/nwnsc
           chmod +x out/nwnsc
-      - name: Locate Beamdog base game resources
+      - name: Probe Beamdog base game resources
         run: |
           docker pull beamdog/nwserver:latest
           CID=$(docker create beamdog/nwserver:latest)
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           docker export "$CID" -o /tmp/nwserver.tar
-          echo '--- key/bif archives ---'
-          tar -tf /tmp/nwserver.tar | grep -Ei '\.(key|bif)$' | head -200
-          echo '--- likely game roots ---'
-          tar -tf /tmp/nwserver.tar | grep -E '/data/[^/]+\.bif$' | sed 's#/data/.*##' | sort -u | head -30
           mkdir -p /tmp/rootfs
           tar -xf /tmp/nwserver.tar -C /tmp/rootfs
-          GAME_ROOT=$(find /tmp/rootfs -type f -iname '*.key' -printf '%h\n' | head -1)
+          GAME_ROOT=/tmp/rootfs/nwn/data
           echo "GAME_ROOT=$GAME_ROOT"
-          test -n "$GAME_ROOT"
+          find "$GAME_ROOT" -maxdepth 2 -type f \( -iname '*.key' -o -iname '*.bif' \) | head -30
           cat > /tmp/probe.nss <<'EOF'
           void main() { object o = GetPCChatSpeaker(); SetPCChatMessage(""); }
           EOF
-          echo '--- nwnsc probe ---'
           out/nwnsc -m 1.69 -j -n "$GAME_ROOT" /tmp/probe.nss
           test -s /tmp/probe.ncs
           sha256sum out/nwnsc > out/SHA256SUMS.txt
