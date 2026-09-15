@@ -22,27 +22,31 @@ jobs:
           test -n "$NWNSC"
           cp "$NWNSC" out/nwnsc
           chmod +x out/nwnsc
-      - name: Extract NWN EE nwscript definitions from Beamdog server image
+      - name: Locate Beamdog base game resources
         run: |
           docker pull beamdog/nwserver:latest
           CID=$(docker create beamdog/nwserver:latest)
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           docker export "$CID" -o /tmp/nwserver.tar
-          tar -tf /tmp/nwserver.tar | grep -i 'nwscript\.nss$' | head -20 | tee /tmp/nwscript_paths.txt || true
-          PATH_IN_IMAGE=$(head -1 /tmp/nwscript_paths.txt || true)
-          if [ -z "$PATH_IN_IMAGE" ]; then
-            echo 'No standalone nwscript.nss found in image' >&2
-            exit 2
-          fi
-          tar -xOf /tmp/nwserver.tar "$PATH_IN_IMAGE" > out/nwscript.nss
-          test -s out/nwscript.nss
-          grep -q 'GetPCChatSpeaker' out/nwscript.nss
-          grep -q 'SetPCChatMessage' out/nwscript.nss
-          head -20 out/nwscript.nss
-          sha256sum out/nwnsc out/nwscript.nss > out/SHA256SUMS.txt
+          echo '--- key/bif archives ---'
+          tar -tf /tmp/nwserver.tar | grep -Ei '\.(key|bif)$' | head -200
+          echo '--- likely game roots ---'
+          tar -tf /tmp/nwserver.tar | grep -E '/data/[^/]+\.bif$' | sed 's#/data/.*##' | sort -u | head -30
+          mkdir -p /tmp/rootfs
+          tar -xf /tmp/nwserver.tar -C /tmp/rootfs
+          GAME_ROOT=$(find /tmp/rootfs -type f -iname '*.key' -printf '%h\n' | head -1)
+          echo "GAME_ROOT=$GAME_ROOT"
+          test -n "$GAME_ROOT"
+          cat > /tmp/probe.nss <<'EOF'
+          void main() { object o = GetPCChatSpeaker(); SetPCChatMessage(""); }
+          EOF
+          echo '--- nwnsc probe ---'
+          out/nwnsc -m 1.69 -j -n "$GAME_ROOT" /tmp/probe.nss
+          test -s /tmp/probe.ncs
+          sha256sum out/nwnsc > out/SHA256SUMS.txt
       - name: Upload compiler
         uses: actions/upload-artifact@v4
         with:
-          name: nwnsc-linux-1.1.5-with-official-nwscript
+          name: nwnsc-linux-1.1.5-probed-against-beamdog
           path: out/
           retention-days: 1
